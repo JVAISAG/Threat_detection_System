@@ -4,12 +4,12 @@ Configuration file for the Distributed Security Threat Detection System
 
 # Federated Learning Configuration
 FL_CONFIG = {
-    'num_clients': 10,
+    'num_clients': 5,  # Reduced from 10 to save memory
     'num_rounds': 50,
-    'local_epochs': 5,
-    'batch_size': 32,
+    'local_epochs': 3,  # Reduced from 5
+    'batch_size': 4,  # Reduced from 32 to save GPU memory
     'learning_rate': 0.001,
-    'client_fraction': 1.0,  # Fraction of clients to use per round
+    'client_fraction': 0.4,  # Train only 40% of clients per round to save memory
 }
 
 # Multimodal Model Configuration
@@ -42,6 +42,7 @@ PRIVACY_CONFIG = {
 # System Configuration
 SYSTEM_CONFIG = {
     'communication_protocol': 'HTTP/2',
-    'use_gpu': True,
+    'use_gpu': False,  # Changed to False to avoid GPU memory issues
     'random_seed': 42,
+    'clear_cache': True,  # Clear GPU cache between rounds
 }

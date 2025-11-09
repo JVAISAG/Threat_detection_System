@@ -107,7 +107,24 @@ The system will automatically download `bert-base-uncased` from Hugging Face on 
 
 ## Usage
 
-### Running the Complete Demo
+### Option 1: Memory-Optimized Version (Recommended)
+
+If you're experiencing GPU memory issues, use the lite version:
+
+```bash
+python main_lite.py
+```
+
+This version:
+- Runs on CPU (no GPU required)
+- Uses smaller batch sizes (4 instead of 32)
+- Trains fewer clients (5 instead of 10)
+- Includes automatic memory cleanup
+- Reduced dataset size for demo
+
+### Option 2: Full Version (Requires GPU)
+
+For full performance with sufficient GPU memory (16GB+ recommended):
 
 ```bash
 python main.py
@@ -279,6 +296,57 @@ Modify `MODEL_CONFIG['num_classes']` and update the classifier head.
 ### Scaling to More Nodes
 
 Increase `FL_CONFIG['num_clients']` and distribute clients across machines.
+
+## Troubleshooting
+
+### GPU Out of Memory Error
+
+If you encounter `torch.OutOfMemoryError: CUDA out of memory`:
+
+**Solution 1: Use the Lite Version**
+```bash
+python main_lite.py  # Runs on CPU, no GPU required
+```
+
+**Solution 2: Reduce Memory Usage in config.py**
+```python
+FL_CONFIG = {
+    'batch_size': 4,        # Reduce from 32
+    'num_clients': 3,       # Reduce from 10
+    'client_fraction': 0.3, # Train fewer clients per round
+}
+
+SYSTEM_CONFIG = {
+    'use_gpu': False,  # Switch to CPU
+}
+```
+
+**Solution 3: Use GPU with Memory Management**
+```bash
+# Set environment variable before running
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+python main_lite.py
+```
+
+**Solution 4: Use Gradient Accumulation**
+Modify the client training loop to accumulate gradients over multiple small batches.
+
+### BERT Model Download Issues
+
+If BERT model download fails:
+```python
+# Manually download and cache
+from transformers import BertModel, BertTokenizer
+BertModel.from_pretrained('bert-base-uncased')
+BertTokenizer.from_pretrained('bert-base-uncased')
+```
+
+### Slow Training on CPU
+
+This is expected. CPU training is 10-50x slower than GPU. Options:
+- Use smaller models
+- Reduce num_clients and num_rounds
+- Use cloud GPU (Colab, AWS, Azure)
 
 ## Future Enhancements
 
