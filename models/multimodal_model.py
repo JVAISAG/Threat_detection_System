@@ -77,10 +77,14 @@ class MultimodalFusionModel(nn.Module):
         self.w_image = nn.Parameter(torch.tensor(0.3))
         self.w_sensor = nn.Parameter(torch.tensor(0.3))
 
-        # Fusion layer
-        total_dim = config['text_embedding_dim'] + config['image_feature_dim'] + config['sensor_feature_dim']
+        # Projection layers to common dimension for each modality
+        self.text_proj = nn.Linear(config['text_embedding_dim'], config['fusion_dim'])
+        self.image_proj = nn.Linear(config['image_feature_dim'], config['fusion_dim'])
+        self.sensor_proj = nn.Linear(config['sensor_feature_dim'], config['fusion_dim'])
+
+        # Fusion layer (now works with fixed fusion_dim regardless of which modalities are present)
         self.fusion = nn.Sequential(
-            nn.Linear(total_dim, config['fusion_dim']),
+            nn.Linear(config['fusion_dim'], config['fusion_dim']),
             nn.ReLU(),
             nn.Dropout(config['dropout_rate']),
             nn.Linear(config['fusion_dim'], config['fusion_dim'] // 2),
@@ -97,33 +101,45 @@ class MultimodalFusionModel(nn.Module):
         Forward pass with multimodal fusion
         Implements X_fused = sum(w_i * X_i) from the paper
         """
-        features = []
-        weights = []
+        batch_size = (text_input_ids.size(0) if text_input_ids is not None
+                     else images.size(0) if images is not None
+                     else sensor_data.size(0))
 
-        # Encode text if available
+        # Initialize fused features with zeros
+        fused_features = torch.zeros(batch_size, self.fusion[0].in_features,
+                                     device=next(self.parameters()).device)
+
+        # Counter for available modalities
+        modality_count = 0
+        total_weight = 0.0
+
+        # Encode and project text if available
         if text_input_ids is not None:
             text_features = self.text_encoder(text_input_ids, text_attention_mask)
-            features.append(text_features)
-            weights.append(self.w_text)
+            text_projected = self.text_proj(text_features)
+            fused_features += self.w_text * text_projected
+            total_weight += self.w_text
+            modality_count += 1
 
-        # Encode images if available
+        # Encode and project images if available
         if images is not None:
             image_features = self.image_encoder(images)
-            features.append(image_features)
-            weights.append(self.w_image)
+            image_projected = self.image_proj(image_features)
+            fused_features += self.w_image * image_projected
+            total_weight += self.w_image
+            modality_count += 1
 
-        # Encode sensor data if available
+        # Encode and project sensor data if available
         if sensor_data is not None:
             sensor_features = self.sensor_encoder(sensor_data)
-            features.append(sensor_features)
-            weights.append(self.w_sensor)
+            sensor_projected = self.sensor_proj(sensor_features)
+            fused_features += self.w_sensor * sensor_projected
+            total_weight += self.w_sensor
+            modality_count += 1
 
-        # Normalize weights
-        weights = torch.stack(weights)
-        weights = torch.softmax(weights, dim=0)
-
-        # Weighted fusion
-        fused_features = torch.cat(features, dim=1)
+        # Normalize by total weight (implements weighted sum from equation 2)
+        if modality_count > 0 and total_weight > 0:
+            fused_features = fused_features / total_weight
 
         # Apply fusion layers
         fused = self.fusion(fused_features)
